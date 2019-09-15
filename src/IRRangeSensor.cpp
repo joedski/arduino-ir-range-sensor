@@ -164,8 +164,15 @@ int8_t IRRangeSensor::readDistance()
 
 uint16_t IRRangeSensor::read(uint8_t carrierComp)
 {
-  // carrier.burstPulsesRemaining = carrier.burstCount;
-  carrier.burstPulsesRemaining = carrier.burstCountUpperBound + CARRIER_BURST_COUNT_DEAD_TIME_UPPER_BOUND;
+  // Since the OVF interrupt is acting as both carrier control
+  // and receiver timeout, we need to take into account both the
+  // maximum acceptable receiver activation time (tpo < t + 6/f0) and
+  // the maximum expected receiver pre-activation dead-time (td < 15/f0)
+  carrier.burstPulsesRemaining = (
+    carrier.burstCountUpperBound
+    + CARRIER_BURST_COUNT_DEAD_TIME_UPPER_BOUND
+  );
+
   receiver.didReceive = false;
   receiver.ticksElapsed = 0;
   senseEnd = false;
@@ -271,36 +278,9 @@ ISR(TIMER2_OVF_vect)
   {
     // Once we've counted down...
 
-    // // Disable the overflow interrupt,
-    // TIMSK2 &= ~(1 << TOIE2);
     // Disconnect OC2B, stopping pulsing the output.
     TCCR2A &= ~(1 << COM2B1);
 
-    // Is ICE still set for falling-edge?
-    if ((TCCR1B & (1 << ICES1)) == 0)
-    {
-      // We counted down while ICE is still set to falling-edge...
-      // Since the Dead Time td of the TSOP38238 before a positive assertion
-      // is stated to be less than 15/f0 seconds (i.e. 15 pulses)
-      // we can assume that in this case we're just not going to
-      // detect anything, and so should move on.
-
-      // Disable input capture interrupt,
-      TIMSK1 &= ~(1 << ICIE1);
-
-      // then set edge detection to rising edge, since that's how
-      // a successful detection would end,
-      TCCR1B &= ~(1 << ICES1);
-
-      // 0-out the value,
-      irRangeSensor.receiver.ticksElapsed = 0;
-      // And don't change didReceive, since, well, we didn't detect!
-
-      // And signal that we're done.
-      irRangeSensor.senseEnd = true;
-
-      irRangeSensor.progress |= PROGRESS_BURST_END_NO_RECV_FALLING;
-    }
     irRangeSensor.progress |= PROGRESS_BURST_END;
   }
   else if (irRangeSensor.carrier.burstPulsesRemaining == 0)
