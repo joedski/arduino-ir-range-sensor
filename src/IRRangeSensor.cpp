@@ -1,4 +1,5 @@
 #include "IRRangeSensor.h"
+// #define IR_RANGE_SENSOR_READ_DISTANCE_DEBUG true
 
 struct IRRangeSensor irRangeSensor;
 
@@ -129,9 +130,21 @@ int8_t IRRangeSensor::readDistance()
 
     if (wasReadingValid() != true)
     {
+#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      Serial.println("Nothing!");
+#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       return -1;
     }
   }
+
+#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+  Serial.print(compLowerBound, HEX);
+  Serial.print("~");
+  Serial.print(compUpperBound, HEX);
+  Serial.print(": ");
+  Serial.print(compTry, HEX);
+  Serial.print(" |< ");
+#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
 
   // Main loop:
   while (iterationsRemaining != 0)
@@ -141,19 +154,34 @@ int8_t IRRangeSensor::readDistance()
 
     read(compTry);
 
+#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+    Serial.print(compTry, HEX);
+#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+
     if (wasReadingValid() == true)
     {
+#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      Serial.print(" |< ");
+#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       // Range closer by shifting the working upper bound downwards.
       compUpper = compTry;
     }
     else
     {
+#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      Serial.print(" |> ");
+#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       // Range farther by shifting the working lower bound upwards.
       compLower = compTry;
     }
   }
 
   compTry = compLower + ((compUpper - compLower) >> 1);
+
+#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+  Serial.print(": ");
+  Serial.println(compTry, HEX);
+#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
 
   // If upper bound is set by f0, use this.
   // If lower bound is set by f0, remove the "100 - " at the beginning.
