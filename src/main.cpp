@@ -144,6 +144,17 @@ void distanceSense()
         output[ci] = ' ';
       }
     }
+    output[100] = '|';
+    if (distance < 10)
+    {
+      Serial.print("  ");
+    }
+    else if (distance < 100)
+    {
+      Serial.print(" ");
+    }
+    Serial.print(distance);
+    Serial.print(": ");
     Serial.println(output);
   }
 }
