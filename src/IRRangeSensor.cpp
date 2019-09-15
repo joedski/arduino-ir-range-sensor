@@ -99,7 +99,7 @@ int8_t IRRangeSensor::readDistance()
   /**
    * How many iterations to perform.
    */
-  uint8_t iterationsRemaining = 8;
+  uint8_t iterationsRemaining = 5;
 
   /**
    * Current upper-bound of search range.
