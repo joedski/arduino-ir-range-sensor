@@ -280,6 +280,11 @@ ISR(TIMER1_CAPT_vect)
     // Disable input capture interrupt,
     TIMSK1 &= ~(1 << ICIE1);
 
+    // Disconnect OC2B, stopping pulsing the output.
+    TCCR2A &= ~(1 << COM2B1);
+    // Disable the overflow interrupt,
+    TIMSK2 &= ~(1 << TOIE2);
+
     // Read the count from the Input Capture Register
     // rather than the Timer Counter Register TCNT1,
     // as this hopefully reduces the chance of corruption,
