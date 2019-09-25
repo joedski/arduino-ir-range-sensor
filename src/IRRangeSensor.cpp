@@ -83,12 +83,12 @@ int8_t IRRangeSensor::readDistance()
    * Lower-bound Timer 2 Compare value.
    * Half-period because Timer 2 is in mode 5.
    *
-   * Initialized to: (Clock / Timer-2-Premultiplier) / 2 / (f0 * 1.05)
+   * Initialized to: (Clock / Timer-2-Premultiplier) / 2 / f0
    *
-   * We start slightly off-center to avoid potential non-monotonicity
-   * in relative sensitivity around the center frequency.
+   * NOTE: We actually start slightly off-center to avoid potential
+   * non-monotonicity in relative sensitivity around the center frequency.
    */
-  uint8_t compUpperBound = (uint8_t)(16e6 / (2.0 * carrier.f0 * 1.05));
+  uint8_t compUpperBound = (uint8_t)(16e6 / (2.0 * carrier.f0));
   /**
    * Upper-bound Timer 2 Compare value.
    * Half-period because Timer 2 is in mode 5.
@@ -143,7 +143,9 @@ int8_t IRRangeSensor::readDistance()
   Serial.print(compUpperBound, HEX);
   Serial.print(": ");
   Serial.print(compTry, HEX);
-  Serial.print(" |< ");
+  Serial.print(" (");
+  Serial.print(16e6 / (2.0 * (float)compTry), 1);
+  Serial.print(") |< ");
 #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
 
   // Main loop:
@@ -156,6 +158,9 @@ int8_t IRRangeSensor::readDistance()
 
 #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
     Serial.print(compTry, HEX);
+    Serial.print(" (");
+    Serial.print(16e6 / (2.0 * (float)compTry), 1);
+    Serial.print(")");
 #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
 
     if (wasReadingValid() == true)
@@ -174,6 +179,14 @@ int8_t IRRangeSensor::readDistance()
       // Range farther by shifting the working lower bound upwards.
       compLower = compTry;
     }
+
+#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+    Serial.print("=");
+    Serial.print(compLower, HEX);
+    Serial.print("~");
+    Serial.print(compUpper, HEX);
+    Serial.print(";  ");
+#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
   }
 
   compTry = compLower + ((compUpper - compLower) >> 1);
