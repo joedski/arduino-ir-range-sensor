@@ -90,6 +90,7 @@ void singleReading()
 {
   while (Serial.available() > 0)
   {
+    Serial.print("Enter OCR2A: ");
     long compValue = Serial.parseInt();
 
     if (Serial.read() == '\n')
@@ -114,7 +115,56 @@ void singleReading()
 
       printProgress();
     }
+  }
+}
 
+void multipleReadings(uint8_t readingCount)
+{
+  uint16_t lastReading;
+  float average = 0.0;
+  uint8_t timesValid = 0;
+
+  while (Serial.available() > 0)
+  {
+    long compValue = Serial.parseInt();
+
+    if (Serial.read() == '\n')
+    {
+      compValue = constrain(compValue, 0, 255);
+
+      Serial.print("Reading with OCR2A of ");
+      Serial.print(compValue);
+      Serial.print(" (");
+      Serial.print(16e6 / (2.0 * (float)compValue) / 1e3, 1);
+      Serial.println("kHz)...");
+
+      for (uint8_t i = 0; i < readingCount; ++i) {
+        lastReading = irRangeSensor.read(compValue);
+
+        if (irRangeSensor.wasReadingValid())
+        {
+          timesValid += 1;
+          average += lastReading;
+        }
+      }
+
+      if (timesValid == 0)
+      {
+        Serial.println("Reading: (n/a)");
+      }
+      else
+      {
+        Serial.print("Reading: ");
+        Serial.print(average / (float)timesValid, 2);
+        Serial.print(", ");
+        Serial.print(timesValid);
+        Serial.print("/");
+        Serial.print(readingCount);
+        Serial.println(" valid reads");
+      }
+
+      // printProgress();
+    }
     Serial.print("Enter OCR2A: ");
   }
 }
@@ -170,7 +220,7 @@ void setup() {
   Serial.begin(9600);
   while (!Serial);
   Serial.println("hi!");
-  // Serial.print("Enter OCR2A: ");
+  Serial.print("Enter OCR2A: ");
 }
 
 void loop() {
@@ -178,6 +228,7 @@ void loop() {
   // platformio device monitor --echo --eol LF --port /whatever/thing
 
   // singleReading();
+  multipleReadings(32);
   // updateDiodeDifferential();
-  distanceSense();
+  // distanceSense();
 }
