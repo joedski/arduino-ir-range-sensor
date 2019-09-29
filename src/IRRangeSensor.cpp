@@ -69,14 +69,8 @@ void IRRangeSensor::setup()
  */
 int8_t IRRangeSensor::readDistance()
 {
-  // NOTE: This is currently inverted from the app notes since I'm working
-  // in 38kHz, and the lower bound would've ended up at 21.3kHz which would
-  // have an OCR2A value of 375, which is a bit bigger than 255...
-  // So I went upwards instead.
-  // On 38kHz, this gives 40kHz ~ 49.4kHz, so an OCR2A range of 200 ~ 161.
-
-  // In the future, I'll probably want to be able to switch implementations.
-  // Shouldn't be too bad since this isn't the timing critical part.
+  // NOTE: This includes some added conditional logic to switch the math
+  // depending on if OCR2A(f0) < OCR2A(f1) or vice versa.
 
   // state...
   /**
@@ -88,14 +82,20 @@ int8_t IRRangeSensor::readDistance()
    * NOTE: We actually start slightly off-center to avoid potential
    * non-monotonicity in relative sensitivity around the center frequency.
    */
-  uint8_t compUpperBound = (uint8_t)(16e6 / (2.0 * carrier.f0));
+  uint8_t compFarInit = (uint8_t)(16e6 / (2.0 * carrier.f0));
   /**
    * Upper-bound Timer 2 Compare value.
    * Half-period because Timer 2 is in mode 5.
    *
    * Initialized to: (Clock / Timer-2-Premultiplier) / 2 / f1
    */
-  uint8_t compLowerBound = (uint8_t)(16e6 / (2.0 * carrier.f1));
+  uint8_t compNearInit = (uint8_t)(16e6 / (2.0 * carrier.f1));
+
+  /**
+   * Is near greater than far?
+   * Used to switch math later to stay positive.
+   */
+  bool nearGtFar = compNearInit > compFarInit;
 
   /**
    * How many iterations to perform.
@@ -107,20 +107,20 @@ int8_t IRRangeSensor::readDistance()
    *
    * Initialized to upper-bound of input space.
    */
-  uint8_t compUpper = compUpperBound;
+  uint8_t compFar = compFarInit;
   /**
    * Current lower-bound of search range.
    *
    * Initialized to lower-bound of input space.
    */
-  uint8_t compLower = compLowerBound;
+  uint8_t compNear = compNearInit;
   /**
    * Current value to try.
    *
    * Initialized to: Closest to center frequency to, so as to detect
    * if something at the farthest extreme of our sensor's range.
    */
-  uint8_t compTry = compUpperBound;
+  uint8_t compTry = compFarInit;
 
   // binary search of input space...
 
@@ -130,76 +130,80 @@ int8_t IRRangeSensor::readDistance()
 
     if (wasReadingValid() != true)
     {
-#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       Serial.println("Nothing!");
-#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       return -1;
     }
   }
 
-#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
-  Serial.print(compLowerBound, HEX);
+  #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+  Serial.print(compNearInit, HEX);
   Serial.print("~");
-  Serial.print(compUpperBound, HEX);
+  Serial.print(compFarInit, HEX);
   Serial.print(": ");
   Serial.print(compTry, HEX);
   Serial.print(" (");
   Serial.print(16e6 / (2.0 * (float)compTry), 1);
   Serial.print(") |< ");
-#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+  #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
 
   // Main loop:
   while (iterationsRemaining != 0)
   {
-    compTry = compLower + ((compUpper - compLower) >> 1);
+    // compTry = compNear + ((compFar - compNear) >> 1);
+    compTry = nearGtFar
+      ? ((compNear - compFar) >> 1) + compFar
+      : ((compFar - compNear) >> 1) + compNear;
     iterationsRemaining -= 1;
 
     read(compTry);
 
-#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+    #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
     Serial.print(compTry, HEX);
     Serial.print(" (");
     Serial.print(16e6 / (2.0 * (float)compTry), 1);
     Serial.print(")");
-#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+    #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
 
     if (wasReadingValid() == true)
     {
-#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       Serial.print(" |< ");
-#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       // Range closer by shifting the working upper bound downwards.
-      compUpper = compTry;
+      compFar = compTry;
     }
     else
     {
-#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       Serial.print(" |> ");
-#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+      #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
       // Range farther by shifting the working lower bound upwards.
-      compLower = compTry;
+      compNear = compTry;
     }
 
-#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+    #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
     Serial.print("=");
-    Serial.print(compLower, HEX);
+    Serial.print(compNear, HEX);
     Serial.print("~");
-    Serial.print(compUpper, HEX);
+    Serial.print(compFar, HEX);
     Serial.print(";  ");
-#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+    #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
   }
 
-  compTry = compLower + ((compUpper - compLower) >> 1);
+  compTry = nearGtFar
+    ? ((compNear - compFar) >> 1) + compFar
+    : ((compFar - compNear) >> 1) + compNear;
 
-#ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+  #ifdef IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
   Serial.print(": ");
   Serial.println(compTry, HEX);
-#endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
+  #endif // IR_RANGE_SENSOR_READ_DISTANCE_DEBUG
 
-  // If upper bound is set by f0, use this.
-  // If lower bound is set by f0, remove the "100 - " at the beginning.
   return (
-    100 - (compTry - compLowerBound) * 100 / (compUpperBound - compLowerBound)
+    ((nearGtFar ? compTry - compFarInit : compFarInit - compTry) * 100)
+    / (nearGtFar ? compNearInit - compFarInit : compFarInit - compNearInit)
   );
 }
 
