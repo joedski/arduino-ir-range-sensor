@@ -86,6 +86,54 @@ void printProgress()
   Serial.println(".");
 }
 
+void doReadingTimesAndPrint(uint8_t readingCount, long compValue)
+{
+  uint16_t lastReading;
+  float average = 0.0;
+  uint8_t timesValid = 0;
+
+  compValue = constrain(compValue, 0, 255);
+
+  Serial.print("Reading with OCR2A of ");
+  Serial.print(compValue);
+  Serial.print(" (");
+  Serial.print(16e6 / (2.0 * (float)compValue) / 1e3, 1);
+  Serial.print("kHz)... ");
+
+  for (uint8_t i = 0; i < readingCount; ++i)
+  {
+    lastReading = irRangeSensor.read(compValue);
+
+    if (irRangeSensor.wasReadingValid())
+    {
+      timesValid += 1;
+      average += lastReading;
+    }
+  }
+
+  if (timesValid == 0)
+  {
+    Serial.println("(n/a)");
+  }
+  else
+  {
+    Serial.print(average / (float)timesValid, 2);
+    Serial.print(", ");
+    Serial.print(timesValid);
+    Serial.print("/");
+    Serial.print(readingCount);
+    Serial.println(" valid reads");
+  }
+}
+
+void doSweepAcrossReadingTimes(uint8_t readingCount)
+{
+  for (long ocr2a = 255; ocr2a >= 210; --ocr2a)
+  {
+    doReadingTimesAndPrint(readingCount, ocr2a);
+  }
+}
+
 void singleReading()
 {
   while (Serial.available() > 0)
@@ -120,49 +168,13 @@ void singleReading()
 
 void multipleReadings(uint8_t readingCount)
 {
-  uint16_t lastReading;
-  float average = 0.0;
-  uint8_t timesValid = 0;
-
   while (Serial.available() > 0)
   {
     long compValue = Serial.parseInt();
 
     if (Serial.read() == '\n')
     {
-      compValue = constrain(compValue, 0, 255);
-
-      Serial.print("Reading with OCR2A of ");
-      Serial.print(compValue);
-      Serial.print(" (");
-      Serial.print(16e6 / (2.0 * (float)compValue) / 1e3, 1);
-      Serial.println("kHz)...");
-
-      for (uint8_t i = 0; i < readingCount; ++i) {
-        lastReading = irRangeSensor.read(compValue);
-
-        if (irRangeSensor.wasReadingValid())
-        {
-          timesValid += 1;
-          average += lastReading;
-        }
-      }
-
-      if (timesValid == 0)
-      {
-        Serial.println("Reading: (n/a)");
-      }
-      else
-      {
-        Serial.print("Reading: ");
-        Serial.print(average / (float)timesValid, 2);
-        Serial.print(", ");
-        Serial.print(timesValid);
-        Serial.print("/");
-        Serial.print(readingCount);
-        Serial.println(" valid reads");
-      }
-
+      doReadingTimesAndPrint(readingCount, compValue);
       // printProgress();
     }
     Serial.print("Enter OCR2A: ");
@@ -179,11 +191,15 @@ void distanceSense()
   }
   else
   {
+    // This is a bit easier to graph.
+    // now 100 = far away, 0 = up close
+    distance = 100 - distance;
+
     for (int8_t ci = 0; ci < 101; ++ci)
     {
       if (ci < distance)
       {
-        output[ci] = '=';
+        output[ci] = ' ';
       }
       else if (ci == distance)
       {
@@ -191,10 +207,13 @@ void distanceSense()
       }
       else
       {
-        output[ci] = ' ';
+        output[ci] = '=';
       }
     }
     output[100] = '|';
+
+    distance = 100 - distance;
+
     if (distance < 10)
     {
       Serial.print("  ");
@@ -209,11 +228,24 @@ void distanceSense()
   }
 }
 
+void sweepOnLF(uint8_t readingCount)
+{
+  while (Serial.available() > 0)
+  {
+    if (Serial.read() == '\n')
+    {
+      doSweepAcrossReadingTimes(readingCount);
+    }
+  }
+}
+
 void setup() {
   setupDiodeDifferential();
 
-  irRangeSensor.carrier.f0 = CARRIER_F0_38KHZ * 1.05;
-  irRangeSensor.carrier.f1 = CARRIER_F0_38KHZ * 1.3;
+  // Keep it off center to avoid non-monotonicity.
+  irRangeSensor.carrier.f0 = 40e3;
+  // Above 48.8kHz, the TSOP38238 just suddenly cannot even the signal.
+  irRangeSensor.carrier.f1 = 48.8e3;
   irRangeSensor.carrier.burstCount = CARRIER_BURST_COUNT_DEFAULT;
   irRangeSensor.setup();
 
@@ -228,7 +260,8 @@ void loop() {
   // platformio device monitor --echo --eol LF --port /whatever/thing
 
   // singleReading();
-  multipleReadings(32);
+  // multipleReadings(64);
+  // sweepOnLF(64);
   // updateDiodeDifferential();
-  // distanceSense();
+  distanceSense();
 }
